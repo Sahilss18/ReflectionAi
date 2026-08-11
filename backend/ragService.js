@@ -86,6 +86,75 @@ async function processAndIndexDocument(sessionId, filePath) {
   }
 }
 
+async function processAndIndexStructuredDocument(sessionId, docStructure) {
+  try {
+    console.log(`Processing structured presentation document for session ${sessionId}`);
+    const chunks = [];
+
+    // 1. Executive Summary Chunk
+    if (docStructure.executive_summary) {
+      chunks.push(
+        `Presentation Title: ${docStructure.title || 'Untitled'}\nExecutive Summary:\n${docStructure.executive_summary}`
+      );
+    }
+
+    // 2. Sections
+    if (Array.isArray(docStructure.sections)) {
+      for (const sec of docStructure.sections) {
+        let secText = `Topic: ${sec.section_title || 'Section'} (Slide ${sec.slide_number || ''})\n`;
+        
+        if (Array.isArray(sec.paragraphs) && sec.paragraphs.length > 0) {
+          secText += sec.paragraphs.map(p => p.text || p).join('\n') + '\n';
+        }
+        
+        if (Array.isArray(sec.key_takeaways) && sec.key_takeaways.length > 0) {
+          secText += 'Key Points:\n' + sec.key_takeaways.map(t => `- ${t}`).join('\n') + '\n';
+        }
+
+        if (Array.isArray(sec.diagram_callouts) && sec.diagram_callouts.length > 0) {
+          secText += 'Visual / Diagram Insights:\n' + sec.diagram_callouts.map(d => `- ${d}`).join('\n') + '\n';
+        }
+
+        if (Array.isArray(sec.tables) && sec.tables.length > 0) {
+          for (const tbl of sec.tables) {
+            if (tbl.headers && tbl.rows) {
+              secText += `Table Data: ${tbl.headers.join(' | ')}\n`;
+              secText += tbl.rows.map(r => r.join(' | ')).join('\n') + '\n';
+            }
+          }
+        }
+
+        // Break section text into standard chunks if it's large
+        const sectionSubChunks = chunkText(secText.trim(), 600, 80);
+        chunks.push(...sectionSubChunks);
+      }
+    }
+
+    const points = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const vector = await getEmbedding(chunk);
+      points.push({
+        id: `${sessionId}-struct-${i}`,
+        vector,
+        payload: { sessionId, text: chunk, chunkIndex: i, isStructured: true }
+      });
+    }
+
+    if (points.length > 0) {
+      await qdrantClient.upsert(COLLECTION_NAME, {
+        wait: true,
+        points: points
+      });
+    }
+    console.log(`Indexed ${points.length} structured chunks for session ${sessionId}`);
+    return points.length;
+  } catch (error) {
+    console.error('Error in processAndIndexStructuredDocument:', error);
+    throw error;
+  }
+}
+
 async function searchContext(sessionId, queryText) {
   try {
     const vector = await getEmbedding(queryText);
@@ -106,5 +175,8 @@ async function searchContext(sessionId, queryText) {
 
 module.exports = {
   processAndIndexDocument,
+  processAndIndexStructuredDocument,
   searchContext
 };
+
+

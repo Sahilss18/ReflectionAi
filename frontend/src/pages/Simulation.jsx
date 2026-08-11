@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Mic, MicOff, PlaySquare } from 'lucide-react';
+import { Mic, MicOff, PlaySquare, FileText, Download } from 'lucide-react';
 
 const SOCKET_SERVER_URL = 'http://localhost:5000';
 
@@ -97,13 +97,39 @@ const Simulation = () => {
     navigate(`/analytics/${sessionId}`);
   };
 
+  const handleDownloadDoc = () => {
+    window.open(`http://localhost:5000/api/download-doc/${sessionId}`, '_blank');
+  };
+
   return (
     <div className="simulation-container">
-      <div className="sim-header">
-        <h2>Live Session: {sessionId}</h2>
-        <span className={`recording-indicator ${isRecording ? 'pulse' : ''}`}>
-          {isRecording ? 'Recording Live' : 'Paused'}
-        </span>
+      <div className="sim-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2>Live Session: {sessionId}</h2>
+          <span className={`recording-indicator ${isRecording ? 'pulse' : ''}`}>
+            {isRecording ? 'Recording Live' : 'Paused'}
+          </span>
+        </div>
+        
+        <button 
+          onClick={handleDownloadDoc} 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 14px',
+            background: '#4338ca',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: '500'
+          }}
+          title="Download the converted Word document generated from your presentation"
+        >
+          <FileText size={16} /> Download Converted Doc (.docx)
+        </button>
       </div>
       
       <div className="panel-container">

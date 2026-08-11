@@ -6,10 +6,15 @@ const Setup = () => {
   const [title, setTitle] = useState('');
   const [scenarioType, setScenarioType] = useState('office');
   const [file, setFile] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMsg, setProcessingMsg] = useState('');
   const navigate = useNavigate();
 
   const handleStartSession = async (e) => {
     e.preventDefault();
+    setIsProcessing(true);
+    setProcessingMsg('Creating session...');
+
     try {
       // Create session
       const sessionRes = await axios.post('http://localhost:5000/api/sessions', {
@@ -20,6 +25,13 @@ const Setup = () => {
 
       // Upload file if selected
       if (file) {
+        const isPptx = file.name.endsWith('.pptx') || file.name.endsWith('.ppt');
+        setProcessingMsg(
+          isPptx
+            ? 'Converting PPTX to structured Word document & indexing context...'
+            : 'Uploading & processing document...'
+        );
+
         const formData = new FormData();
         formData.append('file', file);
         await axios.post(`http://localhost:5000/api/upload/${sessionId}`, formData, {
@@ -31,7 +43,8 @@ const Setup = () => {
       navigate(`/simulation/${sessionId}`);
     } catch (error) {
       console.error('Error starting session:', error);
-      alert('Failed to start session.');
+      alert('Failed to start session: ' + (error.response?.data?.error || error.message));
+      setIsProcessing(false);
     }
   };
 
@@ -46,12 +59,17 @@ const Setup = () => {
             value={title} 
             onChange={(e) => setTitle(e.target.value)} 
             required 
+            disabled={isProcessing}
           />
         </div>
         
         <div className="form-group">
           <label>Scenario / Target Audience</label>
-          <select value={scenarioType} onChange={(e) => setScenarioType(e.target.value)}>
+          <select 
+            value={scenarioType} 
+            onChange={(e) => setScenarioType(e.target.value)}
+            disabled={isProcessing}
+          >
             <option value="academic">Students & Researchers</option>
             <option value="sales">Sales Representatives</option>
             <option value="investor">Business & Founders (Investor Pitch)</option>
@@ -61,14 +79,27 @@ const Setup = () => {
         </div>
 
         <div className="form-group">
-          <label>Upload Context (PDF/PPTX)</label>
+          <label>Upload Presentation (PPTX / PDF)</label>
           <input 
             type="file" 
+            accept=".pptx,.ppt,.pdf"
             onChange={(e) => setFile(e.target.files[0])} 
+            disabled={isProcessing}
           />
+          {file && file.name.endsWith('.pptx') && (
+            <small style={{ color: '#6366f1', marginTop: '4px', display: 'block' }}>
+              ✨ AI will transform this PPTX into a structured .docx document & index diagrams for the simulation.
+            </small>
+          )}
         </div>
 
-        <button type="submit" className="btn-primary">Start Simulation</button>
+        {isProcessing ? (
+          <div style={{ textAlign: 'center', padding: '12px', color: '#4f46e5', fontWeight: '500' }}>
+            <span className="spinner">⏳ </span> {processingMsg}
+          </div>
+        ) : (
+          <button type="submit" className="btn-primary">Start Simulation</button>
+        )}
       </form>
     </div>
   );
