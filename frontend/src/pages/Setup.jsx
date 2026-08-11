@@ -1,14 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const Setup = () => {
   const [title, setTitle] = useState('');
-  const [scenarioType, setScenarioType] = useState('office');
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState('');
+  const [maxActors, setMaxActors] = useState(1);
+  const [numActors, setNumActors] = useState(1);
+  const [customRoles, setCustomRoles] = useState(['StrictExternalExaminer']);
+  const [availableRoles, setAvailableRoles] = useState([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Fetch max available actors based on API keys
+    axios.get('http://localhost:5000/api/system/info')
+      .then(res => {
+        const max = res.data.maxActors || 1;
+        setMaxActors(max);
+        if (numActors > max) {
+          setNumActors(max);
+        }
+      })
+      .catch(err => console.error("Error fetching system info:", err));
+
+    // Fetch available predefined roles
+    axios.get('http://localhost:5000/api/system/roles')
+      .then(res => {
+        setAvailableRoles(res.data.roles || []);
+        if (res.data.roles && res.data.roles.length > 0) {
+          setCustomRoles([res.data.roles[0]]);
+        }
+      })
+      .catch(err => console.error("Error fetching roles:", err));
+  }, []);
+
+  const handleNumActorsChange = (e) => {
+    let count = parseInt(e.target.value) || 1;
+    if (count > maxActors) count = maxActors;
+    if (count < 1) count = 1;
+    setNumActors(count);
+    
+    // Adjust custom roles array size
+    const newRoles = [...customRoles];
+    while (newRoles.length < count) {
+      newRoles.push(availableRoles.length > 0 ? availableRoles[0] : 'StrictExternalExaminer');
+    }
+    setCustomRoles(newRoles.slice(0, count));
+  };
+
+  const handleRoleChange = (index, value) => {
+    const newRoles = [...customRoles];
+    newRoles[index] = value;
+    setCustomRoles(newRoles);
+  };
 
   const handleStartSession = async (e) => {
     e.preventDefault();
@@ -16,10 +62,10 @@ const Setup = () => {
     setProcessingMsg('Creating session...');
 
     try {
-      // Create session
+      // Create session with chosen title and custom actor roles
       const sessionRes = await axios.post('http://localhost:5000/api/sessions', {
         title,
-        scenarioType
+        customRoles
       });
       const sessionId = sessionRes.data.sessionId;
 
@@ -64,19 +110,32 @@ const Setup = () => {
         </div>
         
         <div className="form-group">
-          <label>Scenario / Target Audience</label>
-          <select 
-            value={scenarioType} 
-            onChange={(e) => setScenarioType(e.target.value)}
+          <label>Number of Actors (Max: {maxActors})</label>
+          <input 
+            type="number" 
+            min="1" 
+            max={maxActors}
+            value={numActors} 
+            onChange={handleNumActorsChange} 
             disabled={isProcessing}
-          >
-            <option value="academic">Students & Researchers</option>
-            <option value="sales">Sales Representatives</option>
-            <option value="investor">Business & Founders (Investor Pitch)</option>
-            <option value="office">Office Presentation / Internal</option>
-            <option value="interview">Job Seekers</option>
-          </select>
+          />
         </div>
+
+        {customRoles.map((role, idx) => (
+          <div className="form-group" key={idx}>
+            <label>Actor {idx + 1} Role</label>
+            <select 
+              value={role} 
+              onChange={(e) => handleRoleChange(idx, e.target.value)}
+              disabled={isProcessing}
+              required
+            >
+              {availableRoles.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+        ))}
 
         <div className="form-group">
           <label>Upload Presentation (PPTX / PDF)</label>

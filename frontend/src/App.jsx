@@ -2,11 +2,13 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Setup from './pages/Setup';
 import Simulation from './pages/Simulation';
 import Analytics from './pages/Analytics';
+import AsciiBackground from './components/AsciiBackground';
 import './App.css';
 
 function App() {
   return (
     <Router>
+      <AsciiBackground />
       <div className="app-container">
         <header className="app-header">
           <h1>Presentation Simulator</h1>

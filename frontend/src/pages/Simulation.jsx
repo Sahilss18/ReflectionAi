@@ -13,13 +13,18 @@ const Simulation = () => {
   const [activeSpeaker, setActiveSpeaker] = useState('User');
   const [socket, setSocket] = useState(null);
   const recognitionRef = useRef(null);
+  const isRecordingRef = useRef(isRecording);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
 
   useEffect(() => {
     // 1. Initialize Socket
     const newSocket = io(SOCKET_SERVER_URL);
     setSocket(newSocket);
     
-    newSocket.emit('join_session', { sessionId, scenarioType: 'office' }); // Hardcoded scenario for now unless fetched
+    newSocket.emit('join_session', { sessionId });
 
     // Listen for AI Response
     newSocket.on('ai_response', (response) => {
@@ -67,13 +72,24 @@ const Simulation = () => {
 
   const speakText = (text) => {
     // Basic Voice Activity Detection (VAD) via Native TTS Interruption:
-    // If we're already speaking, cancel it (to handle barge-in natively)
     window.speechSynthesis.cancel();
+    
+    // Auto-Mute: Stop mic while AI is talking to prevent hallucinated audio loops
+    if (isRecordingRef.current) {
+      try { recognitionRef.current?.stop(); } catch(e) {}
+    }
     
     const utterance = new SpeechSynthesisUtterance(text);
     
     utterance.onend = () => {
       setActiveSpeaker('User');
+      
+      // Auto-Unmute: Restart mic 1 second after AI finishes
+      setTimeout(() => {
+        if (isRecordingRef.current) {
+          try { recognitionRef.current?.start(); } catch(e) {}
+        }
+      }, 1000);
     };
     
     window.speechSynthesis.speak(utterance);
@@ -81,13 +97,19 @@ const Simulation = () => {
 
   const toggleRecording = () => {
     if (isRecording) {
-      recognitionRef.current?.stop();
+      try { recognitionRef.current?.stop(); } catch(e) {}
       setIsRecording(false);
       setActiveSpeaker('Idle');
     } else {
       // VAD Barge-in: if user starts speaking, stop AI
       window.speechSynthesis.cancel();
-      recognitionRef.current?.start();
+      
+      // Notify backend that presentation actually started
+      if (socket) {
+        socket.emit('start_presentation', { sessionId });
+      }
+      
+      try { recognitionRef.current?.start(); } catch(e) {}
       setIsRecording(true);
       setActiveSpeaker('User');
     }
@@ -99,6 +121,33 @@ const Simulation = () => {
 
   const handleDownloadDoc = () => {
     window.open(`http://localhost:5000/api/download-doc/${sessionId}`, '_blank');
+  };
+
+  const downloadTranscript = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/sessions/${sessionId}/transcript`);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const data = await response.json();
+      
+      let textContent = `Presentation Simulator Transcript - Session ${sessionId}\n\n`;
+      data.forEach(log => {
+        const timeStr = log.timestamp || log.created_at ? new Date(log.timestamp || log.created_at).toLocaleTimeString() : '';
+        textContent += `[${timeStr}] ${log.speaker_role}: ${log.message}\n\n`;
+      });
+
+      const blob = new Blob([textContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transcript-session-${sessionId}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download transcript:', error);
+      alert('Failed to download transcript. Make sure the backend is running.');
+    }
   };
 
   return (
@@ -163,6 +212,10 @@ const Simulation = () => {
         
         <button onClick={endSession} className="btn btn-secondary">
           End Session & View Analytics
+        </button>
+        
+        <button onClick={downloadTranscript} className="btn btn-secondary">
+          <Download size={18} /> Download Transcript
         </button>
       </div>
     </div>
