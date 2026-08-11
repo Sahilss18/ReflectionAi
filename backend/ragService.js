@@ -1,6 +1,7 @@
 const { QdrantClient } = require('@qdrant/js-client-rest');
 const fs = require('fs');
 const pdf = require('pdf-parse');
+const officeParser = require('officeparser');
 
 // Dynamic import for transformers to avoid CommonJS/ESM issues
 let pipeline;
@@ -29,10 +30,21 @@ async function initQdrant() {
 
 initQdrant();
 
-async function extractTextFromPDF(filePath) {
-  const dataBuffer = fs.readFileSync(filePath);
-  const data = await pdf(dataBuffer);
-  return data.text;
+async function extractTextFromFile(filePath) {
+  if (filePath.toLowerCase().endsWith('.pdf')) {
+    const dataBuffer = fs.readFileSync(filePath);
+    const data = await pdf(dataBuffer);
+    return data.text;
+  } else {
+    // officeparser natively returns a Promise for parseOffice
+    try {
+      const data = await officeParser.parseOffice(filePath);
+      return data;
+    } catch (error) {
+      console.error("OfficeParser failed:", error);
+      return "";
+    }
+  }
 }
 
 function chunkText(text, chunkSize = 500, overlap = 50) {
@@ -57,8 +69,8 @@ async function getEmbedding(text) {
 
 async function processAndIndexDocument(sessionId, filePath) {
   try {
-    console.log(`Processing PDF for session ${sessionId}: ${filePath}`);
-    const text = await extractTextFromPDF(filePath);
+    console.log(`Processing file for session ${sessionId}: ${filePath}`);
+    const text = await extractTextFromFile(filePath);
     const chunks = chunkText(text);
 
     const points = [];
