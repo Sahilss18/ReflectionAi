@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Mic, MicOff, PlaySquare, Download } from 'lucide-react';
+import { Mic, MicOff, PlaySquare, FileText, Download } from 'lucide-react';
 
 const SOCKET_SERVER_URL = 'http://localhost:5000';
 
@@ -24,7 +24,7 @@ const Simulation = () => {
     const newSocket = io(SOCKET_SERVER_URL);
     setSocket(newSocket);
     
-    newSocket.emit('join_session', { sessionId, scenarioType: 'office' }); // Hardcoded scenario for now unless fetched
+    newSocket.emit('join_session', { sessionId });
 
     // Listen for AI Response
     newSocket.on('ai_response', (response) => {
@@ -119,6 +119,10 @@ const Simulation = () => {
     navigate(`/analytics/${sessionId}`);
   };
 
+  const handleDownloadDoc = () => {
+    window.open(`http://localhost:5000/api/download-doc/${sessionId}`, '_blank');
+  };
+
   const downloadTranscript = async () => {
     try {
       const response = await fetch(`http://localhost:5000/api/sessions/${sessionId}/transcript`);
@@ -127,7 +131,8 @@ const Simulation = () => {
       
       let textContent = `Presentation Simulator Transcript - Session ${sessionId}\n\n`;
       data.forEach(log => {
-        textContent += `[${new Date(log.created_at).toLocaleTimeString()}] ${log.speaker_role}: ${log.message}\n\n`;
+        const timeStr = log.timestamp || log.created_at ? new Date(log.timestamp || log.created_at).toLocaleTimeString() : '';
+        textContent += `[${timeStr}] ${log.speaker_role}: ${log.message}\n\n`;
       });
 
       const blob = new Blob([textContent], { type: 'text/plain' });
@@ -147,11 +152,33 @@ const Simulation = () => {
 
   return (
     <div className="simulation-container">
-      <div className="sim-header">
-        <h2>Live Session: {sessionId}</h2>
-        <span className={`recording-indicator ${isRecording ? 'pulse' : ''}`}>
-          {isRecording ? 'Recording Live' : 'Paused'}
-        </span>
+      <div className="sim-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2>Live Session: {sessionId}</h2>
+          <span className={`recording-indicator ${isRecording ? 'pulse' : ''}`}>
+            {isRecording ? 'Recording Live' : 'Paused'}
+          </span>
+        </div>
+        
+        <button 
+          onClick={handleDownloadDoc} 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 14px',
+            background: '#4338ca',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: '500'
+          }}
+          title="Download the converted Word document generated from your presentation"
+        >
+          <FileText size={16} /> Download Converted Doc (.docx)
+        </button>
       </div>
       
       <div className="panel-container">

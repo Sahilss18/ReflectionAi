@@ -5,6 +5,8 @@ import axios from 'axios';
 const Setup = () => {
   const [title, setTitle] = useState('');
   const [file, setFile] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMsg, setProcessingMsg] = useState('');
   const [maxActors, setMaxActors] = useState(1);
   const [numActors, setNumActors] = useState(1);
   const [customRoles, setCustomRoles] = useState(['StrictExternalExaminer']);
@@ -15,9 +17,10 @@ const Setup = () => {
     // Fetch max available actors based on API keys
     axios.get('http://localhost:5000/api/system/info')
       .then(res => {
-        setMaxActors(res.data.maxActors || 1);
-        if (numActors > res.data.maxActors) {
-            setNumActors(res.data.maxActors);
+        const max = res.data.maxActors || 1;
+        setMaxActors(max);
+        if (numActors > max) {
+          setNumActors(max);
         }
       })
       .catch(err => console.error("Error fetching system info:", err));
@@ -27,7 +30,7 @@ const Setup = () => {
       .then(res => {
         setAvailableRoles(res.data.roles || []);
         if (res.data.roles && res.data.roles.length > 0) {
-            setCustomRoles([res.data.roles[0]]);
+          setCustomRoles([res.data.roles[0]]);
         }
       })
       .catch(err => console.error("Error fetching roles:", err));
@@ -55,8 +58,11 @@ const Setup = () => {
 
   const handleStartSession = async (e) => {
     e.preventDefault();
+    setIsProcessing(true);
+    setProcessingMsg('Creating session...');
+
     try {
-      // Create session
+      // Create session with chosen title and custom actor roles
       const sessionRes = await axios.post('http://localhost:5000/api/sessions', {
         title,
         customRoles
@@ -65,6 +71,13 @@ const Setup = () => {
 
       // Upload file if selected
       if (file) {
+        const isPptx = file.name.endsWith('.pptx') || file.name.endsWith('.ppt');
+        setProcessingMsg(
+          isPptx
+            ? 'Converting PPTX to structured Word document & indexing context...'
+            : 'Uploading & processing document...'
+        );
+
         const formData = new FormData();
         formData.append('file', file);
         await axios.post(`http://localhost:5000/api/upload/${sessionId}`, formData, {
@@ -76,7 +89,8 @@ const Setup = () => {
       navigate(`/simulation/${sessionId}`);
     } catch (error) {
       console.error('Error starting session:', error);
-      alert('Failed to start session.');
+      alert('Failed to start session: ' + (error.response?.data?.error || error.message));
+      setIsProcessing(false);
     }
   };
 
@@ -91,6 +105,7 @@ const Setup = () => {
             value={title} 
             onChange={(e) => setTitle(e.target.value)} 
             required 
+            disabled={isProcessing}
           />
         </div>
         
@@ -102,6 +117,7 @@ const Setup = () => {
             max={maxActors}
             value={numActors} 
             onChange={handleNumActorsChange} 
+            disabled={isProcessing}
           />
         </div>
 
@@ -111,6 +127,7 @@ const Setup = () => {
             <select 
               value={role} 
               onChange={(e) => handleRoleChange(idx, e.target.value)}
+              disabled={isProcessing}
               required
             >
               {availableRoles.map(r => (
@@ -121,14 +138,27 @@ const Setup = () => {
         ))}
 
         <div className="form-group">
-          <label>Upload Context (PDF/PPTX)</label>
+          <label>Upload Presentation (PPTX / PDF)</label>
           <input 
             type="file" 
+            accept=".pptx,.ppt,.pdf"
             onChange={(e) => setFile(e.target.files[0])} 
+            disabled={isProcessing}
           />
+          {file && file.name.endsWith('.pptx') && (
+            <small style={{ color: '#6366f1', marginTop: '4px', display: 'block' }}>
+              ✨ AI will transform this PPTX into a structured .docx document & index diagrams for the simulation.
+            </small>
+          )}
         </div>
 
-        <button type="submit" className="btn-primary">Start Simulation</button>
+        {isProcessing ? (
+          <div style={{ textAlign: 'center', padding: '12px', color: '#4f46e5', fontWeight: '500' }}>
+            <span className="spinner">⏳ </span> {processingMsg}
+          </div>
+        ) : (
+          <button type="submit" className="btn-primary">Start Simulation</button>
+        )}
       </form>
     </div>
   );

@@ -5,3 +5,12 @@ qdrant_data/
 dist/
 build/
 .DS_Store
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.pytest_cache/
+PPT_to_PDF/backend/uploads/
+PPT_to_PDF/backend/outputs/
+PPT_to_PDF/backend/extracted_media/
+
