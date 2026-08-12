@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const { processAndIndexDocument, processAndIndexStructuredDocument } = require('./ragService');
 const { getOrchestrator } = require('./agentOrchestrator');
+const { convertPptxToDocx } = require('./converterService');
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
@@ -20,7 +21,6 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 5000;
-const PPTX_CONVERTER_URL = process.env.PPTX_CONVERTER_URL || 'http://localhost:8000';
 
 // Ensure uploads folder exists
 if (!fs.existsSync('uploads')) {
@@ -182,41 +182,21 @@ app.post('/api/upload/:sessionId', upload.single('file'), async (req, res) => {
       [sessionId, file.originalname, file.path, safeMimeType]
     );
 
-    // 2. If PPTX, convert to DOCX via PPTX_to_DOC engine
+    // 2. If PPTX, convert to DOCX via embedded Python converter engine
     if (isPptx) {
       try {
-        console.log(`[Session ${sessionId}] Converting PPTX to DOCX via ${PPTX_CONVERTER_URL}...`);
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(file.path), {
-          filename: file.originalname
-        });
-        formData.append('mode', 'intelligent');
+        console.log(`[Session ${sessionId}] Converting PPTX to DOCX via embedded Python engine...`);
+        const docxFilename = `Converted_${sessionId}_${path.basename(file.originalname, ext)}.docx`;
+        const docxPath = path.join('uploads', docxFilename);
 
-        const convResponse = await axios.post(`${PPTX_CONVERTER_URL}/api/convert`, formData, {
-          headers: formData.getHeaders(),
-          timeout: 120000
-        });
+        const convData = await convertPptxToDocx(file.path, docxPath, 'intelligent');
+        console.log(`[Session ${sessionId}] PPTX Conversion successful: ${docxFilename}`);
 
-        const convData = convResponse.data;
-        const taskId = convData.task_id;
-        console.log(`[Session ${sessionId}] Conversion successful. Task ID: ${taskId}`);
-
-        // Download and save generated DOCX locally
-        if (taskId) {
-          const docxResponse = await axios.get(`${PPTX_CONVERTER_URL}/api/download/${taskId}`, {
-            responseType: 'arraybuffer'
-          });
-
-          const docxFilename = `Converted_${sessionId}_${path.basename(file.originalname, ext)}.docx`;
-          const docxPath = path.join('uploads', docxFilename);
-          fs.writeFileSync(docxPath, Buffer.from(docxResponse.data));
-
-          // Save DOCX record to DB
-          await db.query(
-            'INSERT INTO UploadedContexts (session_id, file_name, file_path, file_type) VALUES (?, ?, ?, ?)',
-            [sessionId, docxFilename, docxPath, 'application/docx']
-          );
-        }
+        // Save DOCX record to DB
+        await db.query(
+          'INSERT INTO UploadedContexts (session_id, file_name, file_path, file_type) VALUES (?, ?, ?, ?)',
+          [sessionId, docxFilename, docxPath, 'application/docx']
+        );
 
         // 3. Index structured presentation content into Qdrant for high-accuracy RAG
         if (convData.document_structure) {
@@ -233,13 +213,13 @@ app.post('/api/upload/:sessionId', upload.single('file'), async (req, res) => {
         });
 
       } catch (convErr) {
-        console.error('PPTX to DOC conversion microservice error:', convErr.message);
+        console.error('Embedded PPTX converter error:', convErr.message);
         // Fallback: Index original document directly
         processAndIndexDocument(sessionId, file.path).catch(err => {
           console.error('Background document fallback RAG indexing failed:', err);
         });
         return res.json({
-          message: 'File uploaded (conversion service unavailable, processed via local parser)',
+          message: 'File uploaded (conversion fallback to local parser)',
           error: convErr.message
         });
       }

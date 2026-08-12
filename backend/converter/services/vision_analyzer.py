@@ -48,7 +48,8 @@ class VisionAnalyzer:
             return self._fallback_image_analysis(element, slide_title)
 
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            model_name = settings.DEFAULT_MODEL or "gemini-1.5-flash"
+            model = genai.GenerativeModel(model_name)
             img = Image.open(element.image_path)
 
             prompt = f"""

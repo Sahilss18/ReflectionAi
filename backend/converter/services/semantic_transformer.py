@@ -46,7 +46,8 @@ class SemanticTransformer:
     def _transform_with_gemini(
         self, presentation: PresentationData, mode: ConversionMode
     ) -> DocumentStructure:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model_name = settings.DEFAULT_MODEL or "gemini-1.5-flash"
+        model = genai.GenerativeModel(model_name)
 
         presentation_dict = presentation.model_dump()
 
